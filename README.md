@@ -14,10 +14,11 @@
 
 코드보다 문서가 먼저다. 작업 순서대로:
 
-1. [PRD — 비전·마일스톤·하지 않을 것](docs/01-PRD.md)
+1. [PRD — Phase 0: 비전·마일스톤·하지 않을 것](docs/01-PRD.md)
 2. [기능 리스트 & 시나리오](docs/02-features-scenarios.md)
 3. [기술 결정 — 참고 게임·엔진 선택·조작법](docs/03-tech-decisions.md)
 4. [선생님 노하우 — 게임 개발·클로드코드 습관](docs/04-teacher-notes.md)
+5. [**장기 비전 — 까비 월드**: 실시간 소셜 월드·IP 팬 플랫폼 로드맵](docs/05-vision-kkabbi-world.md)
 
 ## 학생 버전과 다른 점
 
