@@ -135,6 +135,11 @@ function startWorld(charKey) {
       setNick: (n) => { save = updateSave({ nick: n }); },
       getMapName: () => map?.name ?? "",
       onSelfMessage: (text) => { myBubble = { text, t: BUBBLE_FRAMES }; },
+      getPlayerState: () =>
+        state === "world" && player
+          ? { x: player.x, y: player.y, map: mapId, face: player.face, walking: player.vx !== 0 && player.onGround }
+          : null,
+      getAppearance: () => ({ cls: save.lastChar ?? "mareh", custom: save.custom }),
     }).then((api) => { chatApi = api; });
   }
 }
@@ -516,6 +521,60 @@ function drawPlayer() {
   if (DEBUG) { ctx.strokeStyle = "#ff2ed1"; ctx.strokeRect(pl.x, pl.y, pl.w, pl.h); }
 }
 
+// 접속한 친구 까비 그리기 — 위치는 보간(lerp)으로 부드럽게
+function drawRemotes() {
+  const remotes = chatApi?.getRemotes?.();
+  if (!remotes) return;
+  const now = performance.now();
+  for (const r of remotes.values()) {
+    if (r.map !== mapId || r.tx === undefined) continue;
+    r.x += (r.tx - r.x) * 0.25;
+    r.y += (r.ty - r.y) * 0.25;
+    r.walkT = r.walking ? (r.walkT ?? 0) + 1 : 0;
+
+    const cx = r.x + PLAYER_W / 2, bottom = r.y + PLAYER_H + 1;
+    const ph = r.walkT * 0.35;
+    let bob = 0, tilt = 0;
+    if (r.walking) { bob = -Math.abs(Math.sin(ph)) * 3; tilt = Math.sin(ph) * 0.13; }
+
+    ctx.save(); ctx.translate(cx, bottom + bob);
+    if ((r.face ?? 1) < 0) ctx.scale(-1, 1);
+    ctx.rotate(tilt);
+    if (r.cls === "custom") {
+      ctx.scale(1.35, 1.35);
+      drawCustomChar(ctx, r.custom ?? DEFAULT_TRAITS, tick);
+    } else if (charReady[r.cls]) {
+      const rimg = charImg[r.cls];
+      const dw = CHAR_DRAW_W, dh = dw * rimg.height / rimg.width;
+      ctx.drawImage(rimg, -dw / 2, -dh, dw, dh);
+    } else {
+      ctx.fillStyle = "#f0c060";
+      ctx.fillRect(-PLAYER_W / 2, -PLAYER_H, PLAYER_W, PLAYER_H);
+    }
+    ctx.restore();
+
+    // 닉네임
+    ctx.font = "9px 'Courier New'"; ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(10,8,24,.6)";
+    const nw = ctx.measureText(r.nick).width + 8;
+    ctx.fillRect(cx - nw / 2, bottom + 4, nw, 12);
+    ctx.fillStyle = "#aef0d8";
+    ctx.fillText(r.nick, cx, bottom + 13);
+
+    // 친구의 채팅 말풍선
+    if (r.bubble && now < r.bubble.until) {
+      ctx.font = "11px 'Courier New'";
+      const bw = Math.max(40, ctx.measureText(r.bubble.text).width + 16);
+      const by = r.y - 18;
+      ctx.fillStyle = "rgba(255,255,255,.94)";
+      ctx.fillRect(cx - bw / 2, by - 20, bw, 24);
+      ctx.fillRect(cx - 4, by + 3, 8, 6);
+      ctx.fillStyle = "#2a2030";
+      ctx.fillText(r.bubble.text, cx, by - 4);
+    }
+  }
+}
+
 function drawBubble() {
   if (!bubble) return;
   const text = bubble.npc.lines[bubble.lineIdx];
@@ -549,6 +608,7 @@ function draw() {
     if (DEBUG) { ctx.strokeStyle = "#39ff14"; ctx.strokeRect(p.x, p.y, p.w, p.h); }
   }
 
+  drawRemotes(); // 접속한 친구 까비들 (내 캐릭터보다 뒤에)
   drawPlayer();
   drawBubble();
 

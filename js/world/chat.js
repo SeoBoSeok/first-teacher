@@ -1,12 +1,14 @@
-// 실시간 채팅 — 서버·계정·저장 없음.
+// 실시간 채팅 + 접속자 위치 공유 — 서버·계정·저장 없음.
 // Trystero(P2P WebRTC): 공개 시그널링으로 브라우저끼리 직접 연결되고,
-// 메시지는 어디에도 기록되지 않는다 (접속 중인 사람끼리만, 닫으면 사라짐).
+// 메시지·위치는 어디에도 기록되지 않는다 (접속 중인 사람끼리만, 닫으면 사라짐).
 
 const MAX_LEN = 80;
-const COOLDOWN_MS = 1200; // 도배 방지
+const COOLDOWN_MS = 1200;   // 도배 방지
 const MAX_LINES = 60;
+const POS_INTERVAL = 120;   // 위치 전송 주기(ms) ≈ 초당 8회
+const BUBBLE_MS = 3800;     // 친구 머리 위 말풍선 유지 시간
 
-export async function initChat({ getNick, setNick, getMapName, onSelfMessage }) {
+export async function initChat({ getNick, setNick, getMapName, onSelfMessage, getPlayerState, getAppearance }) {
   const box = document.getElementById("chat");
   const logEl = box.querySelector(".chat-log");
   const input = box.querySelector("input");
@@ -22,40 +24,76 @@ export async function initChat({ getNick, setNick, getMapName, onSelfMessage }) 
   }
 
   let sendChat = null, sendHello = null;
-  const peers = new Map(); // peerId → nick
-  const refreshHead = () => { headEl.textContent = `💬 채팅 · 접속 ${peers.size + 1}명`; };
+  // peerId → { nick, cls, custom, x, y, tx, ty, map, face, walking, walkT, bubble }
+  const remotes = new Map();
+  const refreshHead = () => { headEl.textContent = `💬 채팅 · 접속 ${remotes.size + 1}명`; };
   refreshHead();
   add("연결 중…", "sys");
 
   try {
     // 버전 고정 — CDN의 최신판 API 변경으로 갑자기 깨지는 것을 방지
     const { joinRoom } = await import("https://esm.run/trystero@0.25.2");
-    const room = joinRoom({ appId: "kkabbi-world-v1" }, "global");
+    const room = joinRoom({ appId: "kkabbi-world-v2" }, "global");
+    if (location.search.includes("debug")) window.__chatDebug = { room, remotes }; // ?debug 진단용
     // v0.25 API: makeAction은 {send, onMessage} 객체, 이벤트는 할당식(room.onPeerJoin = fn)
     const chat = room.makeAction("chat");
     const hello = room.makeAction("hello");
+    const pos = room.makeAction("pos");
     sendChat = chat.send; sendHello = hello.send;
 
-    room.onPeerJoin = (id) => { sendHello({ nick: getNick() }, id); };
+    const myHello = () => ({ nick: getNick(), ...getAppearance() });
+
+    room.onPeerJoin = (id) => {
+      // 연결 즉시 등록 (닉네임은 hello로 나중에) — 접속 수가 바로 정확해진다
+      if (!remotes.has(id)) remotes.set(id, { nick: null, cls: "mareh", custom: null });
+      refreshHead();
+      // 채널 직후 전송은 유실될 수 있어 시차를 두고 재시도
+      for (const d of [0, 800, 2500]) setTimeout(() => { try { sendHello(myHello(), id); } catch {} }, d);
+    };
     room.onPeerLeave = (id) => {
-      const n = peers.get(id);
-      peers.delete(id); refreshHead();
+      const n = remotes.get(id)?.nick;
+      remotes.delete(id); refreshHead();
       if (n) add(`${n} 님이 월드를 떠났어요`, "sys");
     };
     // v0.25: onMessage 두 번째 인자는 {peerId} 객체 (문자열 아님 — 주의!)
     hello.onMessage = (data, meta) => {
       const id = meta?.peerId ?? meta;
-      const isNew = !peers.has(id);
-      peers.set(id, String(data?.nick ?? "까비").slice(0, 12));
+      const prev = remotes.get(id) ?? {};
+      const firstHello = !prev.nick;
+      remotes.set(id, {
+        ...prev,
+        nick: String(data?.nick ?? "까비").slice(0, 12),
+        cls: data?.cls ?? "mareh",
+        custom: data?.custom ?? null,
+      });
       refreshHead();
-      if (isNew) { add(`${peers.get(id)} 님이 들어왔어요 👋`, "sys"); sendHello({ nick: getNick() }, id); }
+      if (firstHello) {
+        add(`${remotes.get(id).nick} 님이 들어왔어요 👋`, "sys");
+        try { sendHello(myHello(), id); } catch {}
+      }
+    };
+    pos.onMessage = (d, meta) => {
+      const r = remotes.get(meta?.peerId ?? meta);
+      if (!r || typeof d?.x !== "number") return;
+      if (r.tx === undefined) { r.x = d.x; r.y = d.y; } // 첫 수신은 순간이동
+      r.tx = d.x; r.ty = d.y; r.map = d.m; r.face = d.f; r.walking = !!d.w;
     };
     chat.onMessage = (data, meta) => {
-      const nick = peers.get(meta?.peerId ?? meta) ?? "까비";
-      add(`[${String(data?.map ?? "")}] ${nick}: ${String(data?.text ?? "").slice(0, MAX_LEN)}`);
+      const id = meta?.peerId ?? meta;
+      const r = remotes.get(id);
+      const text = String(data?.text ?? "").slice(0, MAX_LEN);
+      add(`[${String(data?.map ?? "")}] ${r?.nick ?? "까비"}: ${text}`);
+      if (r) r.bubble = { text, until: performance.now() + BUBBLE_MS }; // 친구 머리 위 말풍선
     };
 
-    add("연결됨! 접속한 친구들과 대화할 수 있어요. (저장되지 않아요)", "sys");
+    // 내 위치 브로드캐스트
+    setInterval(() => {
+      const s = getPlayerState();
+      if (!s || remotes.size === 0) return;
+      try { pos.send({ x: Math.round(s.x), y: Math.round(s.y), m: s.map, f: s.face, w: s.walking ? 1 : 0 }); } catch {}
+    }, POS_INTERVAL);
+
+    add("연결됨! 접속한 친구들이 월드에 보이고 대화할 수 있어요. (저장되지 않아요)", "sys");
     add(`내 이름: ${getNick()} — 바꾸려면 "/이름 새이름"`, "sys");
   } catch (e) {
     console.error("[chat] 연결 실패:", e); // 디버깅용 — 사용자에겐 아래 안내만 보임
@@ -71,7 +109,7 @@ export async function initChat({ getNick, setNick, getMapName, onSelfMessage }) 
     // 이름 바꾸기 명령
     if (raw.startsWith("/이름 ") || raw.startsWith("/name ")) {
       const nick = raw.split(" ").slice(1).join(" ").trim().slice(0, 12);
-      if (nick) { setNick(nick); add(`이름을 '${nick}'(으)로 바꿨어요`, "sys"); sendHello?.({ nick }); }
+      if (nick) { setNick(nick); add(`이름을 '${nick}'(으)로 바꿨어요`, "sys"); sendHello?.({ nick, ...getAppearance() }); }
       return;
     }
 
@@ -91,5 +129,5 @@ export async function initChat({ getNick, setNick, getMapName, onSelfMessage }) 
     if (e.key === "Escape") { input.value = ""; input.blur(); }
   });
 
-  return { focusInput: () => input.focus() };
+  return { focusInput: () => input.focus(), getRemotes: () => remotes };
 }
