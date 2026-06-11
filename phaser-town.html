@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>KKABBI TOWN — Phaser 비교 데모</title>
+<!--
+  ⚖️ 엔진 비교 자료 (docs/03, 05 참고)
+  kkabbi-world.html(바닐라)과 같은 "까비 마을 산책"을 Phaser 3로 구현한 데모.
+  수업 포인트: 물리·카메라·입력을 엔진이 대신해 주는 대신,
+  동작 원리는 엔진 안(블랙박스)으로 들어간다. 두 파일의 줄 수와 가독성을 비교해 볼 것.
+-->
+<style>
+  * { margin:0; padding:0; }
+  html, body { height:100%; background:#05060a; display:flex; align-items:center; justify-content:center; }
+  canvas { image-rendering: pixelated; }
+  #note { position:fixed; left:10px; bottom:8px; color:#8a7a68; font:11px "Courier New"; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.87.0/dist/phaser.min.js"></script>
+</head>
+<body>
+<p id="note">Phaser 3 비교 데모 — 이동 ←→ · 점프 Space (바닐라 버전: kkabbi-world.html)</p>
+<script>
+const W = 640, H = 480, GROUND_Y = 456, WORLD_W = 1700;
+
+class Town extends Phaser.Scene {
+  preload() {
+    this.load.image("mareh", "char_mareh.png"); // 바닐라와 같은 캐릭터 에셋
+  }
+
+  create() {
+    // 하늘 그라데이션 — 바닐라에선 createLinearGradient 5줄, Phaser에선 graphics로 비슷한 분량
+    const sky = this.add.graphics().setScrollFactor(0);
+    sky.fillGradientStyle(0x1a0a2e, 0x1a0a2e, 0xff9a56, 0xff9a56, 1);
+    sky.fillRect(0, 0, W, H);
+
+    // 패럴랙스 능선 — scrollFactor 한 줄이면 끝 (바닐라에선 translate 계산 직접)
+    this.makeRidge(0x180826, 360, 90).setScrollFactor(0.2);
+    this.makeRidge(0x2a1038, 410, 70).setScrollFactor(0.45);
+
+    // 집·우물·가로등 — 바닐라 drawProp과 같은 코드 픽셀 방식
+    this.makeHouse(360, 180, 120, 0x7a4a5a, 0xe86a6a);
+    this.makeHouse(900, 210, 140, 0x5a4a7a, 0x7a8ae8);
+    this.makeLamp(260); this.makeLamp(860); this.makeLamp(1340);
+
+    // 발판 — Arcade Physics 정적 그룹: 충돌 코드를 직접 쓰지 않는다
+    const plats = this.physics.add.staticGroup();
+    const addPlat = (x, y, w, h, top) => {
+      const r = this.add.rectangle(x + w / 2, y + h / 2, w, h, 0x4a3046);
+      this.add.rectangle(x + w / 2, y + 2, w, 4, top);
+      plats.add(r);
+    };
+    addPlat(0, GROUND_Y, WORLD_W, 24, 0xcaa37a);
+    addPlat(340, 360, 120, 14, 0xcaa37a);
+    addPlat(520, 310, 100, 14, 0xcaa37a);
+    addPlat(880, 350, 140, 14, 0xcaa37a);
+    addPlat(1150, 320, 110, 14, 0xcaa37a);
+
+    // 플레이어 — 중력·충돌·카메라 추적이 전부 설정 한 줄씩
+    this.player = this.physics.add.sprite(600, GROUND_Y - 60, "mareh");
+    const scale = 44 / this.player.width;
+    this.player.setScale(scale).setCollideWorldBounds(true);
+    this.player.body.setSize(this.player.width * 0.45, this.player.height * 0.9);
+    this.physics.add.collider(this.player, plats);
+
+    this.physics.world.setBounds(0, -200, WORLD_W, H + 200);
+    this.cameras.main.setBounds(0, 0, WORLD_W, H).startFollow(this.player, true, 0.12, 0.12);
+
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.jumps = 2;
+
+    this.add.text(W / 2, 50, "까비 마을 (Phaser)", { font: "bold 20px Courier New", color: "#ffe8c0" })
+      .setScrollFactor(0).setOrigin(0.5);
+  }
+
+  update() {
+    const onGround = this.player.body.touching.down;
+    if (onGround) this.jumps = 2;
+
+    // 이동 — 바닐라의 vx 계산과 같은 감각이 되도록 수치 환산 (1.3*1.6px/f ≈ 125px/s)
+    const speed = 125;
+    if (this.cursors.left.isDown) { this.player.setVelocityX(-speed); this.player.setFlipX(true); }
+    else if (this.cursors.right.isDown) { this.player.setVelocityX(speed); this.player.setFlipX(false); }
+    else this.player.setVelocityX(0);
+
+    // 더블점프 — jumpV -9px/f ≈ -540px/s
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.space) && this.jumps > 0) {
+      this.player.setVelocityY(-540);
+      this.jumps--;
+    }
+  }
+
+  // ── 코드 픽셀 소품 (바닐라 drawProp 이식) ──
+  makeRidge(color, baseY, amp) {
+    const g = this.add.graphics();
+    g.fillStyle(color, 1);
+    g.beginPath(); g.moveTo(0, H);
+    for (let x = 0; x <= WORLD_W; x += 16) {
+      g.lineTo(x, baseY - Math.abs(Math.sin(x * 0.004) * amp) - Math.abs(Math.sin(x * 0.013) * amp * 0.4));
+    }
+    g.lineTo(WORLD_W, H); g.closePath(); g.fillPath();
+    return g;
+  }
+  makeHouse(x, w, h, wall, roof) {
+    const g = this.add.graphics();
+    g.fillStyle(wall, 1); g.fillRect(x, GROUND_Y - h, w, h);
+    g.fillStyle(0x2a1a20, 1); g.fillRect(x + w * 0.4, GROUND_Y - h * 0.45, w * 0.2, h * 0.45);
+    g.fillStyle(0xffe8a0, 1);
+    g.fillRect(x + w * 0.12, GROUND_Y - h * 0.75, w * 0.18, h * 0.2);
+    g.fillRect(x + w * 0.7, GROUND_Y - h * 0.75, w * 0.18, h * 0.2);
+    g.fillStyle(roof, 1);
+    for (let i = 0; i < 4; i++) g.fillRect(x - 10 + i * 5, GROUND_Y - h - 26 + i * 7, w + 20 - i * 10, 8);
+  }
+  makeLamp(x) {
+    const g = this.add.graphics();
+    g.fillStyle(0x3a3a4a, 1); g.fillRect(x - 2, GROUND_Y - 64, 4, 64);
+    g.fillStyle(0xffd86a, 1); g.fillRect(x - 7, GROUND_Y - 76, 14, 14);
+  }
+}
+
+new Phaser.Game({
+  type: Phaser.AUTO,
+  width: W, height: H,
+  pixelArt: true,
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  physics: { default: "arcade", arcade: { gravity: { y: 1800 } } }, // GRAV 0.5px/f² ≈ 1800px/s²
+  scene: Town,
+});
+</script>
+</body>
+</html>
