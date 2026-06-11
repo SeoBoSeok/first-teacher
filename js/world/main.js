@@ -11,6 +11,7 @@ import { MAPS, FIRST_MAP } from "./maps.js";
 import { loadSave, updateSave } from "./save.js";
 import { DEFAULT_TRAITS, drawCustomChar, toNftAttributes } from "./traits.js";
 import { initBuilder } from "./builder.js";
+import { initChat } from "./chat.js";
 
 const charStats = (cls) => (cls === "custom" ? CUSTOM_STATS : CHARACTERS[cls]);
 
@@ -32,11 +33,13 @@ for (const k of CHAR_KEYS) {
 const keys = {};
 let justJump = false, justUp = false;
 addEventListener("keydown", (e) => {
+  if (e.target instanceof HTMLInputElement) return; // 채팅 입력 중에는 게임 키 무시
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
   if (!keys[e.code]) {
     if (e.code === "Space" || e.code === "KeyZ") justJump = true;
     if (e.code === "ArrowUp") justUp = true;
     if (e.code === "KeyP" && state === "world") takePhoto();
+    if (e.code === "Enter" && state === "world") chatApi?.focusInput();
   }
   keys[e.code] = true;
 });
@@ -77,6 +80,8 @@ addEventListener("keyup", (e) => { keys[e.code] = false; });
 // ── 상태 ──────────────────────────────────────────────────
 let state = "select"; // select | builder | world
 let flashT = 0, toastT = 0, toastMsg = "";
+let chatApi = null;
+let myBubble = null; // { text, t } — 내가 보낸 채팅을 머리 위 말풍선으로
 let save = loadSave();
 let mapId = null, map = null;
 let player = null;
@@ -117,6 +122,19 @@ function startWorld(charKey) {
   enterMap(save.lastMap && MAPS[save.lastMap] ? save.lastMap : FIRST_MAP, null, charKey);
   overlay.classList.add("hidden");
   state = "world";
+
+  // 채팅 시작 (한 번만) — 접속자끼리만, 저장 없음
+  if (!chatApi) {
+    if (!save.nick) save = updateSave({ nick: `까비${1000 + Math.floor(Math.random() * 9000)}` });
+    document.getElementById("chat").classList.remove("hidden");
+    chatApi = { focusInput: () => {} }; // 연결 전 임시
+    initChat({
+      getNick: () => save.nick,
+      setNick: (n) => { save = updateSave({ nick: n }); },
+      getMapName: () => map?.name ?? "",
+      onSelfMessage: (text) => { myBubble = { text, t: BUBBLE_FRAMES }; },
+    }).then((api) => { chatApi = api; });
+  }
 }
 
 // ── 커스텀 까비 빌더 ──────────────────────────────────────
@@ -240,6 +258,7 @@ function update() {
 
   if (bannerT > 0) bannerT--;
   if (bubble && --bubble.t <= 0) bubble = null;
+  if (myBubble && --myBubble.t <= 0) myBubble = null;
   updateAmbient();
 }
 
@@ -459,6 +478,20 @@ function draw() {
   drawPlayer();
   drawBubble();
 
+  // 내 채팅 말풍선 (메이플처럼 머리 위에)
+  if (myBubble) {
+    const x = player.x + player.w / 2, y = player.y - 18;
+    ctx.font = "11px 'Courier New'";
+    const bw = Math.max(40, ctx.measureText(myBubble.text).width + 16);
+    ctx.globalAlpha = Math.min(1, myBubble.t / 30);
+    ctx.fillStyle = "rgba(255,255,255,.94)";
+    ctx.fillRect(x - bw / 2, y - 20, bw, 24);
+    ctx.fillRect(x - 4, y + 3, 8, 6);
+    ctx.fillStyle = "#2a2030"; ctx.textAlign = "center";
+    ctx.fillText(myBubble.text, x, y - 4);
+    ctx.globalAlpha = 1;
+  }
+
   // 분위기 파티클 (월드 좌표)
   for (const a of ambient) {
     if (map.theme.ambient === "fireflies") {
@@ -485,7 +518,7 @@ function draw() {
 
   // 조작 안내 (항상 은은하게)
   ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.font = "10px 'Courier New'"; ctx.textAlign = "left";
-  ctx.fillText("이동 ←→ · 점프 Space/Z(2단) · 포탈/대화 ↑ · 인증샷 P", 10, H - 10);
+  ctx.fillText("이동 ←→ · 점프 Space/Z(2단) · 포탈/대화 ↑ · 인증샷 P · 채팅 Enter", 10, H - 10);
 
   // 인증샷 플래시·토스트
   if (flashT > 0) {
