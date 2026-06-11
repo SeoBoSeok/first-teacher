@@ -3,12 +3,16 @@
 
 import {
   W, H, GROUND_Y, GRAV, MAX_FALL, JUMPS_MAX, WORLD_SPEED_MULT,
-  CHARACTERS, CHAR_KEYS, PLAYER_W, PLAYER_H, CHAR_DRAW_W,
+  CHARACTERS, CHAR_KEYS, CUSTOM_STATS, PLAYER_W, PLAYER_H, CHAR_DRAW_W,
   PORTAL_W, PORTAL_H, INTERACT_RANGE, FADE_FRAMES, BANNER_FRAMES, BUBBLE_FRAMES,
   PARALLAX_FAR, PARALLAX_NEAR, PARALLAX_CLOUD, AMBIENT_COUNT,
 } from "./config.js";
 import { MAPS, FIRST_MAP } from "./maps.js";
 import { loadSave, updateSave } from "./save.js";
+import { DEFAULT_TRAITS, drawCustomChar, toNftAttributes } from "./traits.js";
+import { initBuilder } from "./builder.js";
+
+const charStats = (cls) => (cls === "custom" ? CUSTOM_STATS : CHARACTERS[cls]);
 
 const cv = document.getElementById("game");
 const ctx = cv.getContext("2d");
@@ -32,13 +36,47 @@ addEventListener("keydown", (e) => {
   if (!keys[e.code]) {
     if (e.code === "Space" || e.code === "KeyZ") justJump = true;
     if (e.code === "ArrowUp") justUp = true;
+    if (e.code === "KeyP" && state === "world") takePhoto();
   }
   keys[e.code] = true;
 });
+
+// ── 인증샷 부스 — 현재 화면 + 프레임 + 트레이트 목록을 PNG로 다운로드 ──
+function takePhoto() {
+  const shot = document.createElement("canvas");
+  shot.width = W; shot.height = H;
+  const g = shot.getContext("2d");
+  g.drawImage(cv, 0, 0); // 플래시가 그려지기 전의 현재 프레임
+
+  // 프레임
+  g.strokeStyle = "#ff9a56"; g.lineWidth = 10; g.strokeRect(5, 5, W - 10, H - 10);
+  g.fillStyle = "rgba(10,8,24,.78)"; g.fillRect(10, H - 64, W - 20, 54);
+  const d = new Date(); // 로컬 날짜 (toISOString은 UTC라 하루 어긋날 수 있음)
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  g.fillStyle = "#ffe8c0"; g.font = "bold 16px 'Courier New'"; g.textAlign = "left";
+  g.fillText(`KKABBI WORLD · ${map.name} · ${date}`, 24, H - 42);
+  g.font = "10px 'Courier New'"; g.fillStyle = "#bfae90";
+  if (player.cls === "custom") {
+    const attrs = toNftAttributes(save.custom ?? DEFAULT_TRAITS)
+      .filter((a) => !["None", "Bare", "Basic", "Barefoot"].includes(a.value))
+      .map((a) => `${a.trait_type}: ${a.value}`).join(" · ");
+    g.fillText(attrs || "Original Kkabbi", 24, H - 24);
+  } else {
+    g.fillText(`Preset: ${CHARACTERS[player.cls].name} · opensea.io/SpaceKkabbi`, 24, H - 24);
+  }
+
+  const a = document.createElement("a");
+  a.download = `kkabbi-world-${date}-${Date.now() % 100000}.png`;
+  a.href = shot.toDataURL("image/png");
+  a.click();
+
+  flashT = 10; toastT = 120; toastMsg = "📸 인증샷이 저장됐어요!";
+}
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 
 // ── 상태 ──────────────────────────────────────────────────
-let state = "select"; // select | world
+let state = "select"; // select | builder | world
+let flashT = 0, toastT = 0, toastMsg = "";
 let save = loadSave();
 let mapId = null, map = null;
 let player = null;
@@ -51,7 +89,8 @@ let cloudOffsets = [];
 let tick = 0;
 
 // ── 캐릭터 선택 (HTML 오버레이) ────────────────────────────
-let selIdx = Math.max(0, CHAR_KEYS.indexOf(save.lastChar ?? ""));
+const SELECT_COUNT = CHAR_KEYS.length + 1; // 프리셋 4종 + 커스텀 까비
+let selIdx = save.lastChar === "custom" ? CHAR_KEYS.length : Math.max(0, CHAR_KEYS.indexOf(save.lastChar ?? ""));
 function renderSelect() {
   document.querySelectorAll(".char-card").forEach((el, i) => el.classList.toggle("selected", i === selIdx));
 }
@@ -60,20 +99,46 @@ document.querySelectorAll(".char-card").forEach((el, i) => {
 });
 addEventListener("keydown", (e) => {
   if (state !== "select") return;
-  if (e.code === "ArrowLeft") { selIdx = (selIdx + CHAR_KEYS.length - 1) % CHAR_KEYS.length; renderSelect(); }
-  if (e.code === "ArrowRight") { selIdx = (selIdx + 1) % CHAR_KEYS.length; renderSelect(); }
-  if (e.code === "Enter" || e.code === "Space") startWorld();
+  if (e.code === "ArrowLeft") { selIdx = (selIdx + SELECT_COUNT - 1) % SELECT_COUNT; renderSelect(); }
+  if (e.code === "ArrowRight") { selIdx = (selIdx + 1) % SELECT_COUNT; renderSelect(); }
+  if (e.code === "Enter" || e.code === "Space") confirmSelect();
 });
-document.getElementById("startBtn").addEventListener("click", startWorld);
+document.getElementById("startBtn").addEventListener("click", confirmSelect);
 renderSelect();
 
-function startWorld() {
+function confirmSelect() {
   if (state !== "select") return;
-  const charKey = CHAR_KEYS[selIdx];
+  if (selIdx === CHAR_KEYS.length) openBuilder();
+  else startWorld(CHAR_KEYS[selIdx]);
+}
+
+function startWorld(charKey) {
   save = updateSave({ lastChar: charKey });
   enterMap(save.lastMap && MAPS[save.lastMap] ? save.lastMap : FIRST_MAP, null, charKey);
   overlay.classList.add("hidden");
   state = "world";
+}
+
+// ── 커스텀 까비 빌더 ──────────────────────────────────────
+const builderEl = document.getElementById("builder");
+function openBuilder() {
+  state = "builder";
+  overlay.classList.add("hidden");
+  builderEl.classList.remove("hidden");
+  initBuilder({
+    root: builderEl,
+    initial: save.custom,
+    onDone: (traits) => {
+      save = updateSave({ custom: traits });
+      builderEl.classList.add("hidden");
+      startWorld("custom");
+    },
+    onCancel: () => {
+      builderEl.classList.add("hidden");
+      overlay.classList.remove("hidden");
+      state = "select";
+    },
+  });
 }
 
 // ── 맵 진입 ───────────────────────────────────────────────
@@ -142,7 +207,7 @@ function update() {
     return;
   }
 
-  const c = CHARACTERS[player.cls];
+  const c = charStats(player.cls);
   const dir = (keys["ArrowLeft"] || keys["KeyA"] ? -1 : 0) + (keys["ArrowRight"] || keys["KeyD"] ? 1 : 0);
   if (dir !== 0) player.face = dir;
   player.vx = dir * c.moveSpd * WORLD_SPEED_MULT;
@@ -330,7 +395,7 @@ function drawPortal(pt) {
 }
 
 function drawPlayer() {
-  const pl = player, img = charImg[pl.cls];
+  const pl = player;
   const cx = pl.x + pl.w / 2, bottom = pl.y + pl.h + 1;
   // 어드벤처와 같은 squash & stretch 워크 사이클
   const ph = pl.walkT * 0.35;
@@ -340,14 +405,21 @@ function drawPlayer() {
     bob = -Math.abs(Math.sin(ph)) * 3; tilt = Math.sin(ph) * 0.13;
     sx = 1 + Math.sin(ph * 2) * 0.04; sy = 1 - Math.sin(ph * 2) * 0.04;
   }
-  if (charReady[pl.cls]) {
+  ctx.save(); ctx.translate(cx, bottom + bob);
+  if (pl.face < 0) ctx.scale(-1, 1);
+  ctx.rotate(tilt); ctx.scale(sx, sy);
+  if (pl.cls === "custom") {
+    ctx.scale(1.35, 1.35); // 커스텀 까비를 PNG 캐릭터와 비슷한 크기로
+    drawCustomChar(ctx, save.custom ?? DEFAULT_TRAITS, tick);
+  } else if (charReady[pl.cls]) {
+    const img = charImg[pl.cls];
     const dw = CHAR_DRAW_W, dh = dw * img.height / img.width;
-    ctx.save(); ctx.translate(cx, bottom + bob);
-    if (pl.face < 0) ctx.scale(-1, 1);
-    ctx.rotate(tilt); ctx.scale(sx, sy);
     ctx.drawImage(img, -dw / 2, -dh, dw, dh);
-    ctx.restore();
-  } else rect(pl.x, pl.y, pl.w, pl.h, CHARACTERS[pl.cls].col);
+  } else {
+    ctx.fillStyle = CHARACTERS[pl.cls].col;
+    ctx.fillRect(-pl.w / 2, -pl.h, pl.w, pl.h);
+  }
+  ctx.restore();
   if (DEBUG) { ctx.strokeStyle = "#ff2ed1"; ctx.strokeRect(pl.x, pl.y, pl.w, pl.h); }
 }
 
@@ -413,7 +485,23 @@ function draw() {
 
   // 조작 안내 (항상 은은하게)
   ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.font = "10px 'Courier New'"; ctx.textAlign = "left";
-  ctx.fillText("이동 ←→ · 점프 Space/Z(2단) · 포탈/대화 ↑", 10, H - 10);
+  ctx.fillText("이동 ←→ · 점프 Space/Z(2단) · 포탈/대화 ↑ · 인증샷 P", 10, H - 10);
+
+  // 인증샷 플래시·토스트
+  if (flashT > 0) {
+    flashT--;
+    ctx.globalAlpha = flashT / 10;
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+  if (toastT > 0) {
+    toastT--;
+    ctx.globalAlpha = Math.min(1, toastT / 30);
+    ctx.fillStyle = "rgba(10,8,24,.8)"; ctx.fillRect(W / 2 - 110, H - 92, 220, 28);
+    ctx.fillStyle = "#6ae8c0"; ctx.font = "bold 12px 'Courier New'"; ctx.textAlign = "center";
+    ctx.fillText(toastMsg, W / 2, H - 73);
+    ctx.globalAlpha = 1;
+  }
   if (DEBUG) { ctx.fillText(`map:${mapId} x:${Math.round(player?.x ?? 0)} cam:${Math.round(cam.x)}`, 10, 16); }
 
   // 페이드

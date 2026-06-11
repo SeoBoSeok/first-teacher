@@ -23,6 +23,9 @@ export const CHAR_KEYS = Object.keys(CHARACTERS);
 export const PLAYER_W = 20, PLAYER_H = 30;
 export const CHAR_DRAW_W = 44; // PNG 표시 폭 (원본 비율 유지)
 
+// 커스텀 까비(트레이트 빌더)의 이동 능력치 — 프리셋 4종의 중간값
+export const CUSTOM_STATS = { name: "커스텀 까비", moveSpd: 1.35, jumpV: -9.0 };
+
 // 포탈·상호작용
 export const PORTAL_W = 36, PORTAL_H = 56;
 export const INTERACT_RANGE = 30;     // NPC·표지판에 말 걸 수 있는 거리(px)

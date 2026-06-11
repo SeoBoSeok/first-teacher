@@ -50,6 +50,31 @@
   }
   #startBtn:hover { background: #ffb070; }
   .hint { font-size: 11px; color: #8a7a68; }
+  .char-card.custom { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .char-card.custom .emoji { font-size: 44px; line-height: 64px; }
+  /* 커스텀 까비 빌더 */
+  #builder.hidden { display: none; }
+  #builder {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: rgba(5,6,10,.92); text-align: center; padding: 20px;
+  }
+  #builder h1 { font-size: 26px; color: #6ae8c0; text-shadow: 0 0 10px #6ae8c0; letter-spacing: 3px; }
+  #builderBody { display: flex; gap: 22px; align-items: center; }
+  #builderPreview {
+    width: 240px; height: 260px; image-rendering: pixelated;
+    background: #100c14; border: 2px solid #6ae8c0; border-radius: 8px;
+  }
+  .builder-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .builder-row .cat { width: 76px; text-align: right; font-size: 12px; color: #8a9a90; }
+  .builder-row .val { width: 190px; font-size: 12px; color: #ffe8c0; }
+  .builder-row button, #builderBtns button {
+    font-family: inherit; cursor: pointer; border: 1px solid #3a4a44;
+    background: #14201c; color: #6ae8c0; border-radius: 5px; padding: 4px 10px; font-size: 12px;
+  }
+  .builder-row button:hover, #builderBtns button:hover { border-color: #6ae8c0; }
+  #builderBtns { display: flex; gap: 10px; }
+  #builderBtns #btnDone { background: #6ae8c0; color: #06201a; font-weight: bold; padding: 8px 18px; }
 </style>
 </head>
 <body>
@@ -64,10 +89,12 @@
       <div class="char-card"><img src="char_mahanni.png" alt="Mahanni"><p>Mahanni</p></div>
       <div class="char-card"><img src="char_mareh.png" alt="Mareh"><p>Mareh</p></div>
       <div class="char-card"><img src="char_marisa.png" alt="Marisa"><p>Marisa</p></div>
+      <div class="char-card custom"><span class="emoji">✨</span><p>커스텀 까비</p></div>
     </div>
     <button id="startBtn">월드 입장</button>
-    <p class="hint">←→ 캐릭터 선택 · Enter 입장 · 게임: 이동 ←→ / 점프 Space / 포탈·대화 ↑</p>
+    <p class="hint">←→ 캐릭터 선택 · Enter 입장 · 게임: 이동 ←→ / 점프 Space / 포탈·대화 ↑ / 인증샷 P</p>
   </div>
+  <div id="builder" class="hidden"></div>
 </div>
 <script type="module" src="js/world/main.js"></script>
 </body>

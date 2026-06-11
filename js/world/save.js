@@ -3,7 +3,7 @@
 const KEY = "kkabbi-world-save";
 const VERSION = 1;
 
-const DEFAULTS = { v: VERSION, lastChar: null, lastMap: null };
+const DEFAULTS = { v: VERSION, lastChar: null, lastMap: null, custom: null }; // custom: 트레이트 빌더 결과
 
 export function loadSave() {
   try {
