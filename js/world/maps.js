@@ -11,8 +11,10 @@ export const MAPS = {
     theme: {
       sky: ["#1a0a2e", "#7a2a4a", "#ff9a56"], // 해질녘 보라→노을
       ridge1: "#2a1038", ridge2: "#180826",
-      platBody: "#4a3046", platTop: "#caa37a", // 나무 데크
-      ambient: "leaves", clouds: true, sun: { x: 0.78, y: 120, r: 34, col: "#ffb070" },
+      platBody: "#4a3046", platTop: "#caa37a", // 나무 데크 (아트 로드 전 폴백)
+      ambient: "leaves", clouds: false, sun: { x: 0.78, y: 120, r: 34, col: "#ffb070" },
+      // 낮 그림(Sunny Land) 위에 노을 무드를 입히는 틴트
+      tint: ["rgba(255,105,25,.45)", "rgba(140,25,95,.32)"],
     },
     platforms: [
       { x: 0, y: GROUND_Y, w: 1700, h: 24 },
@@ -27,6 +29,9 @@ export const MAPS = {
       { type: "well", x: 720 },
       { type: "house", x: 900, w: 210, h: 140, col: "#5a4a7a", roof: "#7a8ae8" },
       { type: "lamp", x: 860 },
+      { type: "bush", x: 600 }, { type: "bush", x: 1240 },
+      { type: "rock", x: 1430 },
+      { type: "tree", x: 1190, h: 130 },
       { type: "lamp", x: 1340 },
       { type: "sign", x: 1550, text: "달빛 숲 →" },
     ],
@@ -53,8 +58,9 @@ export const MAPS = {
     theme: {
       sky: ["#2a4858", "#caa05a", "#ffe8a0"], // 노을빛 하늘
       ridge1: "#3a5a3a", ridge2: "#23401f",
-      platBody: "#3a5a30", platTop: "#9ae87a", // 풀 언덕
-      ambient: "petals", clouds: true, sun: { x: 0.25, y: 100, r: 44, col: "#ffcf70" },
+      platBody: "#3a5a30", platTop: "#9ae87a", // 풀 언덕 (아트 로드 전 폴백)
+      ambient: "petals", clouds: false, sun: { x: 0.25, y: 100, r: 44, col: "#ffcf70" },
+      tint: ["rgba(255,175,55,.42)", "rgba(255,110,45,.26)"], // 황금빛 노을
     },
     platforms: [
       { x: 0, y: GROUND_Y, w: 1600, h: 24 },
@@ -68,6 +74,7 @@ export const MAPS = {
       { type: "tree", x: 480, h: 110 }, { type: "tree", x: 1300, h: 130 },
       { type: "flowers", x: 240 }, { type: "flowers", x: 660 }, { type: "flowers", x: 900 },
       { type: "flowers", x: 1120 }, { type: "flowers", x: 1430 },
+      { type: "bush", x: 860 }, { type: "bush", x: 1450 }, { type: "rock", x: 700 },
       { type: "fence", x: 30, w: 120 },
     ],
     npcs: [],
@@ -81,8 +88,9 @@ export const MAPS = {
     theme: {
       sky: ["#050214", "#0e0a30", "#1a1448"], // 깊은 밤
       ridge1: "#120a30", ridge2: "#090520",
-      platBody: "#23203c", platTop: "#7a6aff", // 달빛 받은 가지
+      platBody: "#23203c", platTop: "#7a6aff", // 달빛 받은 가지 (아트 로드 전 폴백)
       ambient: "fireflies", clouds: false, moon: { x: 0.7, y: 90, r: 30, col: "#e8ecff" },
+      tint: ["rgba(10,8,60,.55)", "rgba(30,10,80,.45)"], // 달빛 밤
     },
     platforms: [
       { x: 0, y: GROUND_Y, w: 1700, h: 24 },

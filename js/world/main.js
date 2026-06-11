@@ -12,11 +12,13 @@ import { loadSave, updateSave } from "./save.js";
 import { DEFAULT_TRAITS, drawCustomChar, toNftAttributes } from "./traits.js";
 import { initBuilder } from "./builder.js";
 import { initChat } from "./chat.js";
+import { img, ready, ART, TILE } from "./assets.js";
 
 const charStats = (cls) => (cls === "custom" ? CUSTOM_STATS : CHARACTERS[cls]);
 
 const cv = document.getElementById("game");
 const ctx = cv.getContext("2d");
+ctx.imageSmoothingEnabled = false; // 픽셀아트 또렷하게
 const overlay = document.getElementById("overlay");
 const DEBUG = new URLSearchParams(location.search).has("debug");
 
@@ -292,6 +294,14 @@ function drawSky() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, t.sky[0]); g.addColorStop(0.55, t.sky[1]); g.addColorStop(1, t.sky[2]);
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  // 원경: Sunny Land 하늘·바다 (낮 그림 → 맵별 틴트로 시간대 연출)
+  const back = img(ART.back);
+  if (ready(back)) {
+    const s = H / back.height, bw = back.width * s;
+    let x = -((cam.x * PARALLAX_CLOUD) % bw);
+    for (; x < W; x += bw) ctx.drawImage(back, x, 0, bw, H);
+  }
   if (t.moon) {
     rect(t.moon.x * W - t.moon.r, t.moon.y - t.moon.r, t.moon.r * 2, t.moon.r * 2, t.moon.col);
     rect(t.moon.x * W - t.moon.r + 8, t.moon.y - t.moon.r - 8, t.moon.r * 2 - 16, 8, t.moon.col);
@@ -304,7 +314,7 @@ function drawSky() {
     }
     ctx.globalAlpha = 1;
   }
-  if (t.sun) {
+  if (t.sun && !ready(img(ART.back))) { // 아트 배경이 있으면 사각 태양은 생략 (틴트가 시간대를 표현)
     const s = t.sun;
     ctx.globalAlpha = 0.25; rect(s.x * W - s.r * 1.6, s.y - s.r * 1.6, s.r * 3.2, s.r * 3.2, s.col); ctx.globalAlpha = 1;
     rect(s.x * W - s.r, s.y - s.r, s.r * 2, s.r * 2, s.col);
@@ -329,6 +339,15 @@ function ridgePath(seed, baseY, amp) {
   ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
 }
 function drawRidges() {
+  // 중경: 숲 실루엣 언덕 (이미지) — 로드 전엔 기존 코드 능선으로 폴백
+  const mid = img(ART.middle);
+  if (ready(mid)) {
+    const s = 0.9, mw = mid.width * s, mh = mid.height * s;
+    const baseY = H - mh + 235; // 언덕 윗부분만 지평선 위로 살짝 보이게
+    let x = -((cam.x * PARALLAX_NEAR) % (mw + 90)) - mw;
+    for (; x < W + mw; x += mw + 90) ctx.drawImage(mid, x, baseY, mw, mh);
+    return;
+  }
   ctx.save();
   ctx.translate(-(cam.x * PARALLAX_FAR) % 16, 0);
   ctx.fillStyle = map.theme.ridge2; ridgePath(1.7, 360, 90);
@@ -339,16 +358,63 @@ function drawRidges() {
   ctx.restore();
 }
 
+// 배경 무드 틴트 — 낮 그림(Sunny Land) 위에 노을/밤을 입힌다 (게임 요소 그리기 전 호출)
+function drawTint() {
+  const tint = map.theme.tint;
+  if (!tint) return;
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, tint[0]); g.addColorStop(1, tint[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+// 발판을 16px 잔디 타일로 — 끝은 캡, 가운데는 반복, 두꺼우면 흙 채움
+function drawTiledPlatform(p) {
+  const ts = img(ART.tileset);
+  if (!ready(ts)) {
+    rect(p.x, p.y, p.w, p.h, map.theme.platBody);
+    rect(p.x, p.y, p.w, 4, map.theme.platTop);
+    return;
+  }
+  const T = TILE.size;
+  // 바닥 지형은 화면 끝까지 흙으로 채워 메이플처럼 두툼하게 (충돌 영역은 그대로)
+  const isGround = p.y >= GROUND_Y;
+  const visualH = isGround ? H - p.y + 40 : p.h;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(p.x, p.y, p.w, visualH); ctx.clip();
+  // 흙 채움 (윗줄 아래)
+  for (let y = p.y + T; y < p.y + visualH; y += T)
+    for (let x = p.x; x < p.x + p.w; x += T)
+      ctx.drawImage(ts, TILE.dirt[0], TILE.dirt[1], T, T, x, y, T, T);
+  // 잔디 윗줄
+  for (let x = p.x; x < p.x + p.w; x += T) {
+    const tile = x === p.x ? TILE.grassL : x + T >= p.x + p.w ? TILE.grassR : TILE.grassM;
+    ctx.drawImage(ts, tile[0], tile[1], T, T, x, p.y, T, T);
+  }
+  ctx.restore();
+}
+
 // ── 코드 픽셀 소품들 ──────────────────────────────────────
 function drawProp(p) {
   const gy = (p.y ?? GROUND_Y);
   if (p.type === "house") {
+    const art = img(ART.house);
+    if (ready(art)) { // 메이플풍 집 (Sunny Land) — w 기준 비율 유지
+      const s = p.w / art.width;
+      ctx.drawImage(art, p.x, gy - art.height * s, p.w, art.height * s);
+      return;
+    }
     const { x, w, h } = p;
-    rect(x, gy - h, w, h, p.col);                                  // 벽
-    rect(x + w * 0.4, gy - h * 0.45, w * 0.2, h * 0.45, "#2a1a20"); // 문
-    rect(x + w * 0.12, gy - h * 0.75, w * 0.18, h * 0.2, "#ffe8a0"); // 창(불빛)
+    rect(x, gy - h, w, h, p.col);                                  // 폴백: 코드 픽셀 집
+    rect(x + w * 0.4, gy - h * 0.45, w * 0.2, h * 0.45, "#2a1a20");
+    rect(x + w * 0.12, gy - h * 0.75, w * 0.18, h * 0.2, "#ffe8a0");
     rect(x + w * 0.7, gy - h * 0.75, w * 0.18, h * 0.2, "#ffe8a0");
-    for (let i = 0; i < 4; i++) rect(x - 10 + i * 5, gy - h - 26 + i * 7, w + 20 - i * 10, 8, p.roof); // 지붕
+    for (let i = 0; i < 4; i++) rect(x - 10 + i * 5, gy - h - 26 + i * 7, w + 20 - i * 10, 8, p.roof);
+  } else if (p.type === "bush") {
+    const art = img(ART.bush);
+    if (ready(art)) ctx.drawImage(art, p.x - 46, gy - 56, 92, 56);
+  } else if (p.type === "rock") {
+    const art = img(ART.rock);
+    if (ready(art)) ctx.drawImage(art, p.x - 28, gy - 30, 56, 30);
   } else if (p.type === "well") {
     rect(p.x - 18, gy - 30, 36, 30, "#6a6a7a"); rect(p.x - 22, gy - 34, 44, 6, "#8a8a9a");
     rect(p.x - 20, gy - 70, 4, 40, "#4a3424"); rect(p.x + 16, gy - 70, 4, 40, "#4a3424");
@@ -366,6 +432,12 @@ function drawProp(p) {
     ctx.fillStyle = "#ffe8c0"; ctx.font = "9px 'Courier New'"; ctx.textAlign = "center";
     ctx.fillText(p.text.length > 10 ? "안내판" : p.text, p.x, gy - 41);
   } else if (p.type === "tree") {
+    const art = img(ART.tree);
+    if (ready(art)) { // 큰 나무 (Sunny Land) — h 기준 비율 유지
+      const s = p.h / art.height;
+      ctx.drawImage(art, p.x - (art.width * s) / 2, gy - p.h, art.width * s, p.h);
+      return;
+    }
     const h = p.h;
     rect(p.x - 7, gy - h * 0.5, 14, h * 0.5, "#4a3424");
     rect(p.x - h * 0.32, gy - h, h * 0.64, h * 0.55, map.theme.ambient === "fireflies" ? "#1c3a30" : "#2e6a3a");
@@ -377,6 +449,8 @@ function drawProp(p) {
       rect(fx - 2, gy - 12, 6, 5, ["#ff8ab0", "#ffd86a", "#caa3ff"][i % 3]);
     }
   } else if (p.type === "mushroom") {
+    const art = img(ART.shrooms);
+    if (ready(art)) { ctx.drawImage(art, p.x - 16, gy - 30, 32, 30); return; }
     rect(p.x - 3, gy - 10, 6, 10, "#e8e0d0");
     rect(p.x - 9, gy - 16, 18, 7, "#c84a5a"); rect(p.x - 5, gy - 14, 3, 2, "#ffe8e8"); rect(p.x + 3, gy - 14, 3, 2, "#ffe8e8");
   }
@@ -461,6 +535,7 @@ function draw() {
   if (state !== "world") return;
   drawSky();
   drawRidges();
+  drawTint(); // 배경에 맵별 시간대 무드 (노을·황금빛·달밤)
 
   ctx.save();
   ctx.translate(-Math.round(cam.x), 0);
@@ -470,8 +545,7 @@ function draw() {
   for (const pt of map.portals) drawPortal(pt);
 
   for (const p of map.platforms) {
-    rect(p.x, p.y, p.w, p.h, map.theme.platBody);
-    rect(p.x, p.y, p.w, 4, map.theme.platTop);
+    drawTiledPlatform(p);
     if (DEBUG) { ctx.strokeStyle = "#39ff14"; ctx.strokeRect(p.x, p.y, p.w, p.h); }
   }
 
