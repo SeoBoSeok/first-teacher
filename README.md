@@ -5,10 +5,12 @@
 
 ## 게임
 
+- **까비 월드** (`kkabbi-world.html` + `js/world/`) — ⭐ 메이플 감성 오픈 월드 (Phase 1 진행 중). 마을·언덕·숲 3맵, 포탈, NPC
 - **까비 어드벤처** (`kkabbi-adventure.html`) — 본편. 직접 그린 캐릭터 4종, 로비+던전 플랫포머
 - **RETRO CHASER** (`index.html`) — 보조. 탑다운 아레나 슈터
+- **Phaser 비교 데모** (`phaser-town.html`) — 같은 마을을 Phaser 3로 구현 (엔진 비교 수업 자료)
 
-실행: `python3 -m http.server 8200` → http://localhost:8200/kkabbi-adventure.html
+실행: `python3 -m http.server 8200` → http://localhost:8200/kkabbi-world.html
 
 ## 문서 (이 저장소의 핵심)
 

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KKABBI WORLD — 까비 월드</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%; background: #05060a; color: #ffe8c0;
+    font-family: "Courier New", monospace;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  #wrap { position: relative; }
+  canvas {
+    display: block; background: #0a0c14;
+    border: 3px solid #ff9a56;
+    box-shadow: 0 0 24px rgba(255,154,86,.45), inset 0 0 40px rgba(255,154,86,.06);
+    image-rendering: pixelated;
+    /* 전체화면 느낌: 내부 해상도(640×480)는 유지하고 화면에 꽉 차게 확대 (4:3 비율 보존) */
+    width: min(98vw, calc(98vh * 4 / 3));
+    height: auto;
+  }
+  #scan {
+    position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom,
+      rgba(0,0,0,0) 0 2px, rgba(0,0,0,.16) 3px 4px);
+  }
+  #overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px;
+    background: rgba(5,6,10,.88); text-align: center; padding: 20px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: 36px; color: #ff9a56; text-shadow: 0 0 12px #ff9a56; letter-spacing: 5px; }
+  #overlay .sub { font-size: 13px; line-height: 1.8; color: #e8d8c0; }
+  #chars { display: flex; gap: 14px; }
+  .char-card {
+    width: 96px; padding: 10px 6px 8px; cursor: pointer;
+    border: 2px solid #4a3a30; border-radius: 8px; background: #100c14;
+    transition: border-color .15s, transform .15s;
+  }
+  .char-card img { width: 64px; height: 64px; object-fit: contain; image-rendering: pixelated; }
+  .char-card p { font-size: 11px; margin-top: 6px; color: #cfc0a8; }
+  .char-card.selected { border-color: #ff9a56; transform: translateY(-4px); box-shadow: 0 0 14px rgba(255,154,86,.4); }
+  #startBtn {
+    font-family: inherit; font-size: 15px; font-weight: bold; letter-spacing: 2px;
+    padding: 10px 34px; cursor: pointer; color: #1a0a08;
+    background: #ff9a56; border: 0; border-radius: 6px;
+  }
+  #startBtn:hover { background: #ffb070; }
+  .hint { font-size: 11px; color: #8a7a68; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="640" height="480"></canvas>
+  <div id="scan"></div>
+  <div id="overlay">
+    <h1>KKABBI WORLD</h1>
+    <p class="sub">까비들의 마을에 놀러 오세요.<br>오늘은 어떤 까비로 산책할까요?</p>
+    <div id="chars">
+      <div class="char-card"><img src="char_machaei.png" alt="Machaei"><p>Machaei</p></div>
+      <div class="char-card"><img src="char_mahanni.png" alt="Mahanni"><p>Mahanni</p></div>
+      <div class="char-card"><img src="char_mareh.png" alt="Mareh"><p>Mareh</p></div>
+      <div class="char-card"><img src="char_marisa.png" alt="Marisa"><p>Marisa</p></div>
+    </div>
+    <button id="startBtn">월드 입장</button>
+    <p class="hint">←→ 캐릭터 선택 · Enter 입장 · 게임: 이동 ←→ / 점프 Space / 포탈·대화 ↑</p>
+  </div>
+</div>
+<script type="module" src="js/world/main.js"></script>
+</body>
+</html>
