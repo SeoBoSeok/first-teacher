@@ -679,5 +679,25 @@ function draw() {
   }
 }
 
+// ── 공식 홈(학생B) 임베드 연동 — M4 ───────────────────────
+// 홈의 /world 페이지가 iframe으로 이 게임을 띄우고, 로그인 닉네임을 postMessage로 보낸다.
+// 허용 출처: 로컬 개발 + Vercel 배포 (postMessage는 누구나 보낼 수 있으므로 반드시 검증)
+function isTrustedHost(origin) {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".vercel.app");
+  } catch {
+    return false;
+  }
+}
+addEventListener("message", (e) => {
+  if (!isTrustedHost(e.origin) || e.data?.type !== "kkabbi:nick") return;
+  const nick = String(e.data.nick ?? "").trim().slice(0, 12);
+  if (!nick || nick === save.nick) return; // 멱등 — 같은 닉 반복 수신 무시
+  save = updateSave({ nick });
+  chatApi?.announceNick?.();
+  chatApi?.notify?.(`공식 홈 계정으로 입장: ${nick}`);
+});
+
 function loop() { update(); draw(); requestAnimationFrame(loop); }
 loop();

@@ -129,5 +129,11 @@ export async function initChat({ getNick, setNick, getMapName, onSelfMessage, ge
     if (e.key === "Escape") { input.value = ""; input.blur(); }
   });
 
-  return { focusInput: () => input.focus(), getRemotes: () => remotes };
+  return {
+    focusInput: () => input.focus(),
+    getRemotes: () => remotes,
+    // 임베드 호스트(공식 홈)가 닉네임을 바꿨을 때 친구들에게 알리기
+    announceNick: () => { try { sendHello?.({ nick: getNick(), ...getAppearance() }); } catch {} },
+    notify: (text) => add(text, "sys"),
+  };
 }
