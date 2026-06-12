@@ -58,6 +58,8 @@ export async function initChat({ getNick, setNick, getMapName, onSelfMessage, ge
     // v0.25: onMessage 두 번째 인자는 {peerId} 객체 (문자열 아님 — 주의!)
     hello.onMessage = (data, meta) => {
       const id = meta?.peerId ?? meta;
+      // 관전자(공식 홈의 라이브 위젯 등)는 플레이어로 세지 않는다
+      if (data?.observer) { remotes.delete(id); refreshHead(); return; }
       const prev = remotes.get(id) ?? {};
       const firstHello = !prev.nick;
       remotes.set(id, {
